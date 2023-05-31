@@ -1,20 +1,36 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Custom Speech Example
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+This repository serves as an illustrative guide for integrating support for a custom speech vendor into [Cognigy Voice Gateway](https://www.cognigy.com/platform/cognigy-voice-gateway) using the speech API. It showcases the incorporation of the following examples:
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+- Text-to-Speech (TTS) providers: [Google](https://cloud.google.com/text-to-speech/docs)
+- Speech-to-Text (STT) providers: [Google](https://cloud.google.com/speech-to-text), [AssemblyAI](https://www.assemblyai.com/docs/walkthroughs#realtime-streaming-transcription), and [Vosk](https://alphacephei.com/vosk/server).
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+## Configuration
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+To configure the application to connect with the desired speech vendors, adjust the corresponding environment variables:
+
+- For Google integration, set `GCP_JSON_KEY_FILE` to the path of your Google JSON key.
+- For AssemblyAI integration, set `ASSEMBLY_AI_API_TOKEN` to your AssemblyAI API key.
+- For Vosk integration, set `VOSK_URL` to the IP address and port of the Vosk server's gRPC endpoint.
+
+## Running
+
+Follow these steps to run the application:
+
+1. Install the required dependencies:
+   ```bash
+   $ npm ci
+   ```
+
+2. Execute the application using the provided environment variables:
+   ```bash
+   $ API_KEY=<foobarwhatever> \
+     GCP_JSON_KEY_FILE=<google-json-key-path> \
+     ASSEMBLY_AI_API_TOKEN=<assemblyai-api-key> \
+     VOSK_URL=xxxx:yyyy \
+     HTTP_PORT=3000 node app.js
+   ```
+
+3. In the Cognigy Voice Gateway portal, create a custom speech vendor, specifying the WebSocket Secure (wss) URL for STT and the HTTP(S) URL for TTS to your server, along with your API key (foobarwhatever).
+
+Once you have added the custom speech vendors, you can utilize them within a Cognigy Voice Gateway application. Ensure that this application is running and accessible at the URLs you provided during the Cognigy Voice Gateway configuration process.
