@@ -1,36 +1,50 @@
 # Custom Speech Example
 
-This repository serves as an illustrative guide for integrating support for a custom speech vendor into [Cognigy Voice Gateway](https://www.cognigy.com/platform/cognigy-voice-gateway) using the speech API. It showcases the incorporation of the following examples:
+This repository serves as an illustrative guide for integrating support for a
+custom speech vendor into [Cognigy Voice Gateway](https://www.cognigy.com/platform/cognigy-voice-gateway)
+using the speech API. It showcases the incorporation of the following examples:
 
-- Text-to-Speech (TTS) providers: [Google](https://cloud.google.com/text-to-speech/docs)
-- Speech-to-Text (STT) providers: [Google](https://cloud.google.com/speech-to-text), [AssemblyAI](https://www.assemblyai.com/docs/walkthroughs#realtime-streaming-transcription), and [Vosk](https://alphacephei.com/vosk/server).
+**TTS**:
+
+- [google](https://cloud.google.com/text-to-speech/docs),
+- [elevenlabs](https://beta.elevenlabs.io/)
+
+**STT**:
+
+- [google](https://cloud.google.com/speech-to-text)
+- [gladia](https://docs.gladia.io/reference/live-audio)
+- [assemblyAI](https://www.assemblyai.com/docs/walkthroughs#realtime-streaming-transcription)
+- [Vosk](https://alphacephei.com/vosk/server).
 
 ## Configuration
 
-To configure the application to connect with the desired speech vendors, adjust the corresponding environment variables:
+You can configure the application to connect to all of the providers or just
+some depending on the environment variables supplied.
 
-- For Google integration, set `GCP_JSON_KEY_FILE` to the path of your Google JSON key.
-- For AssemblyAI integration, set `ASSEMBLY_AI_API_TOKEN` to your AssemblyAI API key.
-- For Vosk integration, set `VOSK_URL` to the IP address and port of the Vosk server's gRPC endpoint.
+- To use google, supply GCP_JSON_KEY_FILE pointing to your google json key
+- To use elevenlabs, supply ELEVEN_API_KEY which has your api key
+- To use assemblyAI, supply ASSEMBLY_AI_API_TOKEN which has your assemblyAI api key
+- To use gladia, supply GLADIA_API_KEY
+- To use Vosk, supply VOSK_URL which has the ip:port of the Vosk server grpc endpoint
 
 ## Running
 
-Follow these steps to run the application:
+```bash
+$ npm ci
 
-1. Install the required dependencies:
-   ```bash
-   $ npm ci
-   ```
+$ API_KEY=<apikey> \
+GCP_JSON_KEY_FILE=<google-json-key-path> \
+ASSEMBLY_AI_API_TOKEN=<assemblyai-api-key> \
+VOSK_URL=xxxx:yyyy
+GLADIA_API_KEY=xxxxxxxx \
+ELEVEN_API_KEY=xxxxxxx \
+HTTP_PORT=3000 node app.js
+```
 
-2. Execute the application using the provided environment variables:
-   ```bash
-   $ API_KEY=<foobarwhatever> \
-     GCP_JSON_KEY_FILE=<google-json-key-path> \
-     ASSEMBLY_AI_API_TOKEN=<assemblyai-api-key> \
-     VOSK_URL=xxxx:yyyy \
-     HTTP_PORT=3000 node app.js
-   ```
+Then, in the Cognigy Voice Gateway portal create a custom speech vendor,
+providing the wss (for STT) and http(s) (for TTS) URLs to your server,
+and your api key (`apikey`).
 
-3. In the Cognigy Voice Gateway portal, create a custom speech vendor, specifying the WebSocket Secure (wss) URL for STT and the HTTP(S) URL for TTS to your server, along with your API key (foobarwhatever).
-
-Once you have added the custom speech vendors, you can utilize them within a Cognigy Voice Gateway application. Ensure that this application is running and accessible at the URLs you provided during the Cognigy Voice Gateway configuration process.
+After adding the custom speech vendors you can use them in a Cognigy Voice Gateway
+application. Make sure this application is running and accessible at the URLs
+you provisioned into Cognigy Voice Gateway.

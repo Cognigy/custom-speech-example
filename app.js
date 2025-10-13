@@ -13,15 +13,24 @@ const isValidApiKey = (hdr, apiKey) => {
 };
 
 const verifyApiKey = (req, res, next) => {
-  if (!isValidApiKey(req.headers['authorization'], process.env.API_KEY)) return res.status(403);
+  if (!isValidApiKey(req.headers['authorization'], process.env.API_KEY)) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
   next();
 };
 
 /* set up a websocket server for the STT api */
 const transcribe = require('./lib/stt/');
-const wsServer = new Websocket.Server({ noServer: true });
-wsServer.setMaxListeners(0);
-wsServer.on('connection', transcribe.bind(null, logger));
+const transcribeWsServer = new Websocket.Server({ noServer: true });
+transcribeWsServer.setMaxListeners(0);
+transcribeWsServer.on('connection', transcribe.bind(null, logger));
+
+/* set up a websocket server for the TTS Streaming api */
+const ttsStreaming = require('./lib/tts/streaming');
+const ttsWsServer = new Websocket.Server({ noServer: true });
+ttsWsServer.setMaxListeners(0);
+ttsWsServer.on('connection', ttsStreaming.bind(null, logger));
+
 
 /* set up the http server for the TTS api */
 app.use(express.urlencoded({ extended: true }));
@@ -33,7 +42,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = app.listen(port, () => {
-  logger.info(`Example Cognigy VoiceGateway speech server listening at http://localhost:${port}`);
+  logger.info(`Example Cognigy Voice Gateway speech server listening at http://localhost:${port}`);
 });
 
 /* handle websocket upgrade requests */
@@ -44,7 +53,7 @@ server.on('upgrade', (request, socket, head) => {
   }, 'received upgrade request');
 
   /* verify the path starts with /transcribe */
-  if (!request.url.startsWith('/transcribe')) {
+  if (!request.url.startsWith('/transcribe') && !request.url.startsWith('/synthesize')) {
     logger.info(`unhandled path: ${request.url}`);
     return socket.write('HTTP/1.1 404 Not Found \r\n\r\n', () => socket.destroy());
   }
@@ -56,8 +65,12 @@ server.on('upgrade', (request, socket, head) => {
   }
 
   /* complete the upgrade */
-  wsServer.handleUpgrade(request, socket, head, (ws) => {
+  transcribeWsServer.handleUpgrade(request, socket, head, (ws) => {
     logger.info(`upgraded to websocket, url: ${request.url}`);
-    wsServer.emit('connection', ws, request.url);
+    if (request.url.startsWith('/synthesize')) {
+      ttsWsServer.emit('connection', ws, request.url);
+    } else if (request.url.startsWith('/transcribe')) {
+      transcribeWsServer.emit('connection', ws, request.url);
+    }
   });
 });
