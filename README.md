@@ -28,7 +28,7 @@ some depending on the environment variables supplied.
 - To use assemblyAI, supply `ASSEMBLY_AI_API_TOKEN` which has your assemblyAI api key
 - To use gladia, supply `GLADIA_API_KEY`
 - To use Vosk, supply `VOSK_URL` which has the ip:port of the Vosk server grpc endpoint
-- To use Smallest AI (TTS + STT), supply `SMALLEST_API_KEY` — get your key from the [Smallest AI console](https://console.smallest.ai)
+- To use Smallest AI, supply `SMALLEST_API_KEY` — get your key from the [Smallest AI console](https://console.smallest.ai)
 
 ## Running
 
