@@ -6,7 +6,7 @@ using the speech API. It showcases the incorporation of the following examples:
 
 **TTS**:
 
-- [google](https://cloud.google.com/text-to-speech/docs)
+- [google](https://cloud.google.com/text-to-speech/docs),
 - [elevenlabs](https://beta.elevenlabs.io/)
 - [Smallest AI Lightning](https://smallest.ai)
 
