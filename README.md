@@ -6,26 +6,29 @@ using the speech API. It showcases the incorporation of the following examples:
 
 **TTS**:
 
-- [google](https://cloud.google.com/text-to-speech/docs),
+- [google](https://cloud.google.com/text-to-speech/docs)
 - [elevenlabs](https://beta.elevenlabs.io/)
+- [Smallest AI Lightning](https://smallest.ai)
 
 **STT**:
 
 - [google](https://cloud.google.com/speech-to-text)
 - [gladia](https://docs.gladia.io/reference/live-audio)
 - [assemblyAI](https://www.assemblyai.com/docs/walkthroughs#realtime-streaming-transcription)
-- [Vosk](https://alphacephei.com/vosk/server).
+- [Vosk](https://alphacephei.com/vosk/server)
+- [Smallest AI Pulse](https://smallest.ai)
 
 ## Configuration
 
 You can configure the application to connect to all of the providers or just
 some depending on the environment variables supplied.
 
-- To use google, supply GCP_JSON_KEY_FILE pointing to your google json key
-- To use elevenlabs, supply ELEVEN_API_KEY which has your api key
-- To use assemblyAI, supply ASSEMBLY_AI_API_TOKEN which has your assemblyAI api key
-- To use gladia, supply GLADIA_API_KEY
-- To use Vosk, supply VOSK_URL which has the ip:port of the Vosk server grpc endpoint
+- To use google, supply `GCP_JSON_KEY_FILE` pointing to your google json key
+- To use elevenlabs, supply `ELEVEN_API_KEY` which has your api key
+- To use assemblyAI, supply `ASSEMBLY_AI_API_TOKEN` which has your assemblyAI api key
+- To use gladia, supply `GLADIA_API_KEY`
+- To use Vosk, supply `VOSK_URL` which has the ip:port of the Vosk server grpc endpoint
+- To use Smallest AI (TTS + STT), supply `SMALLEST_API_KEY` — get your key from the [Smallest AI console](https://console.smallest.ai)
 
 ## Running
 
@@ -35,9 +38,10 @@ $ npm ci
 $ API_KEY=<apikey> \
 GCP_JSON_KEY_FILE=<google-json-key-path> \
 ASSEMBLY_AI_API_TOKEN=<assemblyai-api-key> \
-VOSK_URL=xxxx:yyyy
+VOSK_URL=xxxx:yyyy \
 GLADIA_API_KEY=xxxxxxxx \
 ELEVEN_API_KEY=xxxxxxx \
+SMALLEST_API_KEY=<smallest-ai-api-key> \
 HTTP_PORT=3000 node app.js
 ```
 
