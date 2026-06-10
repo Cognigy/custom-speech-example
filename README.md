@@ -27,7 +27,8 @@ some depending on the environment variables supplied.
 - To use rime, supply RIME_API_KEY which has your api key. Optionally supply
   RIME_MODEL_ID (`coda`, `arcana`, or `mistv2`; defaults to `coda`); you can
   also pick the model per voice by naming the voice `<modelId>:<speaker>`
-  (e.g. `arcana:luna`)
+  (e.g. `arcana:luna`). RIME_TIMEOUT_MS caps the upstream request time
+  (default 30000)
 - To use assemblyAI, supply ASSEMBLY_AI_API_TOKEN which has your assemblyAI api key
 - To use gladia, supply GLADIA_API_KEY
 - To use Vosk, supply VOSK_URL which has the ip:port of the Vosk server grpc endpoint
