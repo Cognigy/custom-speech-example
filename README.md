@@ -8,6 +8,7 @@ using the speech API. It showcases the incorporation of the following examples:
 
 - [google](https://cloud.google.com/text-to-speech/docs) — non-streaming
 - [elevenlabs](https://beta.elevenlabs.io/) — non-streaming
+- [rime](https://docs.rime.ai/api-reference/coda/http) — non-streaming
 - [deepgram](https://developers.deepgram.com/docs/text-to-speech) — **streaming** (reference implementation of the streaming TTS contract)
 
 **STT**:
@@ -48,6 +49,11 @@ some depending on the environment variables supplied.
 
 - To use google, supply `GCP_JSON_KEY_FILE` pointing to your google json key
 - To use elevenlabs, supply `ELEVEN_API_KEY` which has your api key
+- To use rime, supply `RIME_API_KEY` which has your api key. Optionally supply
+  `RIME_MODEL_ID` (`coda`, `arcana`, or `mistv2`; defaults to `coda`); you can
+  also pick the model per voice by naming the voice `<modelId>:<speaker>`
+  (e.g. `arcana:luna`). `RIME_TIMEOUT_MS` caps the upstream request time
+  (default 30000)
 - To use deepgram (streaming TTS), supply `DEEPGRAM_API_KEY`
 - To use assemblyAI, supply `ASSEMBLY_AI_API_TOKEN` which has your assemblyAI api key
 - To use gladia, supply `GLADIA_API_KEY`
