@@ -3,7 +3,7 @@ const app = express();
 const Websocket = require('ws');
 const opts = Object.assign({level: process.env.LOGLEVEL || 'info'});
 const logger = require('pino')(opts);
-const port = process.env.HTTP_PORT || 3000;
+const port = process.env.PORT || process.env.HTTP_PORT || 3000;
 const routes = require('./lib/tts');
 app.locals = {...app.locals, logger};
 
