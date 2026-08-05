@@ -1038,7 +1038,9 @@ Your service should accept WebSocket connections for real-time audio streaming.
 
 Accept and honor these configuration parameters:
 - `language` or `languageCode`: BCP-47 language code (e.g., "en-US", "de-DE")
-- `sampleRate` or `sampleRateHz`: Audio sample rate in Hz (typically 8000 or 16000)
+- `sampleRate` or `sampleRateHz`: Audio sample rate in Hz — take this from the
+  rate your module was given, not from a hard-coded constant (see
+  [Sample rate and codecs](#sample-rate-and-codecs))
 - `interimResults` or `partialResults`: Boolean indicating whether to return interim results
 
 #### 3. Accept Audio Format
@@ -1371,7 +1373,12 @@ Fields:
 - `format`: Always `"raw"` — audio arrives as bare binary frames, not containerized
 - `encoding`: Always `"LINEAR16"`
 - `interimResults`: Boolean indicating whether interim results are requested
-- `sampleRateHz`: Sample rate in Hz (typically 8000 or 16000)
+- `sampleRateHz`: Sample rate of the audio you will receive, in Hz.
+  **Authoritative — read it from the message rather than hard-coding a value.**
+  Voice Gateway resamples the call audio to this rate before sending it, so the
+  binary frames always arrive at exactly this rate regardless of the codec on
+  the call (see [Sample rate and codecs](#sample-rate-and-codecs)). In practice
+  this is `8000` (the default) or `16000`.
 - `options`: Free-form object of vendor-specific settings, passed through
   verbatim from the custom speech configuration in Voice Gateway. An empty
   object (`{}`) when nothing is configured. Ignore keys you do not recognize.
@@ -1398,10 +1405,36 @@ Not guaranteed: an abnormal call end can close the socket without a `stop`.
 ##### Audio Data
 - Format: Binary WebSocket frames
 - Encoding: LINEAR16 PCM (raw PCM audio, 16-bit signed integer, little-endian)
-- Sample rate: As specified in the `start` message
+- Sample rate: Exactly the `sampleRateHz` from the `start` message — see
+  [Sample rate and codecs](#sample-rate-and-codecs)
 - Channels: Mono (1 channel)
 - Cadence: streamed continuously for the lifetime of the connection, which may
   cover a single turn or several — see [Session Lifecycle](#session-lifecycle)
+
+##### Sample rate and codecs
+
+**Voice Gateway resamples for you.** The rate advertised in `sampleRateHz` is
+the rate you receive; the codec negotiated on the call never reaches your
+service. Whatever the caller's leg uses — PCMU/PCMA at 8 kHz, G.722 at 16 kHz,
+Opus at up to 48 kHz — Voice Gateway decodes it and converts the audio to
+`sampleRateHz` before putting it on the WebSocket.
+
+So a call carried over Opus at 48 kHz does **not** result in 48 kHz frames on
+this socket. It is downsampled to the configured rate first, which by default
+means your service receives 8 kHz audio.
+
+Practical guidance:
+
+- **Read `sampleRateHz` from the `start` message and configure your provider
+  from it.** Do not hard-code, and do not infer the rate from the codec in use
+  on the call — you cannot see it.
+- **Expect `8000` or `16000` in practice.** `8000` is the default; `16000` is
+  used where the deployment configures it.
+- **Fail loudly on a rate you cannot serve.** If your provider requires a rate
+  Voice Gateway did not request, resample on your side, or return
+  `{"type": "error", …}` rather than silently transcribing at the wrong rate —
+  a mismatch usually produces garbled or empty transcripts rather than an
+  obvious failure.
 
 #### 2. From Your Service to Voice Gateway
 
@@ -2111,7 +2144,12 @@ ffmpeg -i input.wav -acodec pcm_s16le -ar 16000 -ac 1 output.raw
 
 2. **Audio Not Transcribed**
    - Verify audio format is LINEAR16 PCM
-   - Check sample rate matches configuration
+   - Check you configured your provider from the `sampleRateHz` in the `start`
+     message rather than assuming a rate — audio always arrives at exactly that
+     rate, and a mismatch typically yields empty or garbled transcripts
+     ([Sample rate and codecs](#sample-rate-and-codecs))
+   - Do not try to derive the rate from the call's codec; Voice Gateway has
+     already resampled (an Opus 48 kHz call still arrives at 8 kHz by default)
    - Ensure audio is loud enough
 
 3. **The turn never ends / the caller is never heard**
