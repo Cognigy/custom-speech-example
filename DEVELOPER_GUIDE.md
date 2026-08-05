@@ -6,6 +6,8 @@ This guide explains how to develop custom Speech-to-Text (STT) and Text-to-Speec
 
 1. [Architecture Overview](#architecture-overview)
 2. [Creating an STT Module](#creating-an-stt-module)
+   - [The STT Session Contract](#the-stt-session-contract)
+   - [Session Lifecycle](#session-lifecycle)
 3. [Creating a TTS Module](#creating-a-tts-module)
    - [Streaming TTS](#streaming-tts)
 4. [External Provider Requirements](#external-provider-requirements)
@@ -77,6 +79,60 @@ This guide explains how to develop custom Speech-to-Text (STT) and Text-to-Speec
 
 ## Creating an STT Module
 
+> ### The STT Session Contract
+>
+> Read this before writing any code — it is what implementations most often get
+> wrong.
+>
+> **Your service is responsible for turn detection.** Voice Gateway has no
+> concept of an utterance boundary. It streams audio continuously and relies on
+> *you* to run voice-activity detection / endpointing and to emit
+> `{"type": "transcription", "is_final": true, …}` when a caller has finished
+> speaking. Voice Gateway ends the listening turn **because** that final result
+> arrived.
+>
+> **`stop` is a teardown signal, not a "finalize now" signal.** It is sent
+> *after* Voice Gateway already has the result it needed. It does **not** mean
+> "the caller stopped talking" and it is **not** a request to flush a pending
+> transcript.
+>
+> **Anything you send after `stop` is discarded.** By the time the `stop`
+> message reaches you, Voice Gateway has already detached the session
+> internally. A service that waits for `stop` before producing its transcript
+> will never deliver a result.
+>
+> The order is always:
+>
+> 1. You detect end of speech and send `{"type": "transcription", "is_final": true, …}`
+> 2. Voice Gateway consumes that result and ends the turn
+> 3. Voice Gateway sends `{"type": "stop"}` and closes the socket
+>
+> See [Session Lifecycle](#session-lifecycle) for connection lifetime and
+> shutdown details.
+
+### Session Lifecycle
+
+**One connection per transcription session, not per utterance.** Voice Gateway
+opens a single WebSocket when transcription starts and keeps it open for the
+whole session, which normally spans **many turns** of the conversation. Do not
+expect a new connection, a new `start`, or a `stop` at each turn boundary.
+
+**Voice Gateway closes the socket too.** Immediately after sending
+`{"type": "stop"}`, Voice Gateway sends its own WebSocket Close frame
+(status `1000`) and then waits only a few seconds (3 s by default) for the
+close handshake to complete. The `socket.close()` shown in the examples below
+is still correct, but treat it as best-effort cleanup — you do not own the
+close, and you have no meaningful window to do work after `stop`.
+
+**There is no automatic reconnect.** If the connection drops, Voice Gateway
+reports a disconnect and does not dial back in. Transcription for that session
+is over.
+
+**Always clean up on socket lifecycle events, not only on `stop`.** Calls end
+abnormally — hangups, network failures, and channel teardown can close the
+socket without a preceding `stop` message. Your `close` / `error` / `end`
+handlers are the authoritative cleanup path.
+
 ### Step 1: Create the Module File
 
 Create a new file in `lib/stt/` directory, e.g., `lib/stt/yourprovider.js`:
@@ -142,7 +198,8 @@ const transcribeYourProvider = async(logger, socket) => {
           // Start streaming audio
         }
         else if (obj.type === 'stop') {
-          // Clean up transcription session
+          // Tear down only. Do NOT try to finalize or emit a transcript here —
+          // Voice Gateway has already detached the session and will discard it.
           // Close provider connection
           // Close socket
         }
@@ -179,7 +236,13 @@ module.exports = transcribeYourProvider;
 
 ### Step 4: Handle the 'start' Message
 
-When you receive a `start` message, initialize your transcription session:
+When you receive a `start` message, initialize your transcription session.
+
+The message carries more fields than the three destructured below — see
+[Start Message](#start-message) in the message format spec for the complete
+set (`format`, `encoding`, and `options` are also sent). Note the
+`is_final` flag you set on results is what drives turn detection: emit
+`is_final: true` from your own endpointing when the caller stops speaking.
 
 ```javascript
 if (obj.type === 'start') {
@@ -231,9 +294,10 @@ else {
 }
 ```
 
-### Step 6: Handle the 'stop' Message
+### Step 6: Handle the 'stop' Message — Tear Down Only
 
-Clean up when transcription ends:
+`stop` tells you the transcription session is over so you can release your
+upstream provider connection. Release resources and nothing else:
 
 ```javascript
 else if (obj.type === 'stop') {
@@ -244,6 +308,20 @@ else if (obj.type === 'stop') {
   socket.close();
 }
 ```
+
+> **Do not produce a transcript here.** `stop` arrives *after* Voice Gateway
+> has already taken the result it needed and detached the session. Any
+> `transcription` message sent in response to `stop` is discarded — it will not
+> reach the call. If your provider only returns text when its stream is closed,
+> you must drive that from your own endpointing during the session and send the
+> result with `is_final: true` at that point, not at `stop`.
+
+> **You do not own the close.** Voice Gateway sends its own Close frame
+> (status `1000`) immediately after `stop` and waits only a few seconds. The
+> `socket.close()` above is best-effort; the connection may already be closing.
+
+Because a call can end abnormally, `stop` is not guaranteed. Keep the same
+cleanup reachable from the `close`, `error`, and `end` handlers.
 
 ### Complete STT Module Examples
 
@@ -913,6 +991,14 @@ them from the `encoding`/`sample_rate` fields VG sends).
 
 This section describes what external STT and TTS providers need to implement to be compatible with this integration framework.
 
+> **This section is about the provider *behind* your module, not about Voice
+> Gateway.** The formats below describe how your module talks upstream to a
+> speech vendor. They are **not** valid on the Voice-Gateway-facing WebSocket —
+> that contract is fixed and specified in
+> [Message Format Specifications](#message-format-specifications). Your module
+> is the adapter between the two. If you send Voice Gateway a payload shaped
+> like the examples in this section, it will be discarded.
+
 ### STT Provider Requirements
 
 If you are building an external STT service that should work with this integration, your service must:
@@ -1223,23 +1309,45 @@ reference implementation.
 
 ### STT Message Formats
 
+#### 0. Connection Handshake
+
+Voice Gateway authenticates on the WebSocket upgrade request with a bearer
+token:
+
+```
+Authorization: Bearer <your configured API key>
+```
+
+Reject connections that do not present the expected key.
+
 #### 1. From Voice Gateway to Your Service
 
 ##### Start Message
+
+Sent once, immediately after the WebSocket connection is established:
+
 ```json
 {
   "type": "start",
   "language": "en-US",
+  "format": "raw",
+  "encoding": "LINEAR16",
+  "interimResults": true,
   "sampleRateHz": 16000,
-  "interimResults": true
+  "options": {}
 }
 ```
 
 Fields:
 - `type`: Always "start"
 - `language`: BCP-47 language code (e.g., "en-US", "de-DE", "fr-FR")
-- `sampleRateHz`: Sample rate in Hz (typically 8000 or 16000)
+- `format`: Always `"raw"` — audio arrives as bare binary frames, not containerized
+- `encoding`: Always `"LINEAR16"`
 - `interimResults`: Boolean indicating whether interim results are requested
+- `sampleRateHz`: Sample rate in Hz (typically 8000 or 16000)
+- `options`: Free-form object of vendor-specific settings, passed through
+  verbatim from the custom speech configuration in Voice Gateway. An empty
+  object (`{}`) when nothing is configured. Ignore keys you do not recognize.
 
 ##### Stop Message
 ```json
@@ -1251,13 +1359,31 @@ Fields:
 Fields:
 - `type`: Always "stop"
 
+Semantics: **session teardown, not end-of-turn.** Sent once, when transcription
+for the session ends — after Voice Gateway has already taken the transcript it
+needed. It is not a request to finalize or flush, and results sent in response
+to it are discarded. Voice Gateway sends its own Close frame (status `1000`)
+straight after and waits ~3 seconds for the handshake. See
+[The STT Session Contract](#the-stt-session-contract).
+
+Not guaranteed: an abnormal call end can close the socket without a `stop`.
+
 ##### Audio Data
 - Format: Binary WebSocket frames
 - Encoding: LINEAR16 PCM (raw PCM audio, 16-bit signed integer, little-endian)
 - Sample rate: As specified in the `start` message
 - Channels: Mono (1 channel)
+- Cadence: streamed continuously for the whole session, across all turns
 
 #### 2. From Your Service to Voice Gateway
+
+Voice Gateway accepts exactly two message types on this socket:
+`"transcription"` and `"error"`. Both must be JSON text frames. Any other
+`type` value — and any non-JSON payload — is **discarded with an error log**,
+so a response shaped for some other protocol will silently produce no
+transcription. In particular, do not send bare provider payloads such as
+`{"text": …, "is_final": …}`; they must be mapped into the
+`transcription` envelope below.
 
 ##### Transcription Message
 ```json
@@ -1281,7 +1407,11 @@ Fields:
 
 Fields:
 - `type`: Always "transcription"
-- `is_final`: Boolean indicating whether this is a final result (true) or interim result (false)
+- `is_final`: Boolean indicating whether this is a final result (true) or interim
+  result (false). **This is what ends the listening turn** — Voice Gateway has no
+  endpointing of its own, so you must set it from your own voice-activity
+  detection when the caller has finished speaking. A session that only ever
+  sends `is_final: false` will never complete a turn.
 - `alternatives`: Array of transcription alternatives, ordered by confidence (highest first)
   - `confidence`: Confidence score from 0.0 to 1.0 (optional for interim results)
   - `transcript`: The transcribed text
@@ -1738,7 +1868,27 @@ wscat -c "ws://localhost:3000/transcribe/yourprovider" \
 
 ### STT Best Practices
 
-1. **Audio Buffering**: Some providers require minimum audio duration per request
+1. **Endpointing is yours**: Voice Gateway never asks you to finalize. Detect
+   end of speech yourself and send the result with `is_final: true` as soon as
+   you have it — that is what ends the turn. Do not defer the transcript to the
+   `stop` message or to socket close; it will be discarded.
+   ```javascript
+   // Right: driven by the provider's own end-of-utterance signal
+   providerConnection.on('utteranceEnd', (result) => {
+     socket.send(JSON.stringify({
+       type: 'transcription',
+       is_final: true,
+       alternatives: [{confidence: result.confidence, transcript: result.text}],
+       channel: 1,
+       language
+     }));
+   });
+
+   // Wrong: nothing sent here will reach the call
+   // else if (obj.type === 'stop') { socket.send(finalTranscript); }
+   ```
+
+2. **Audio Buffering**: Some providers require minimum audio duration per request
    ```javascript
    socket.audioBuffer = [];
    
@@ -1751,12 +1901,12 @@ wscat -c "ws://localhost:3000/transcribe/yourprovider" \
    }
    ```
 
-2. **Interim Results**: Honor the `interimResults` flag
+3. **Interim Results**: Honor the `interimResults` flag
    ```javascript
    if (!is_final && !interimResults) return; // Skip interim results if not requested
    ```
 
-3. **Stream Management**: Keep track of stream state
+4. **Stream Management**: Keep track of stream state
    ```javascript
    socket.providerStream = stream;
    // Later:
@@ -1766,7 +1916,7 @@ wscat -c "ws://localhost:3000/transcribe/yourprovider" \
    }
    ```
 
-4. **Confidence Scores**: Always include confidence when available
+5. **Confidence Scores**: Always include confidence when available
    ```javascript
    alternatives: [{
      confidence: result.confidence || 0.0,
@@ -1936,12 +2086,22 @@ ffmpeg -i input.wav -acodec pcm_s16le -ar 16000 -ac 1 output.raw
    - Check sample rate matches configuration
    - Ensure audio is loud enough
 
-3. **TTS Returns Error**
+3. **The turn never ends / the caller is never heard**
+   - You are almost certainly waiting for `stop` before producing a transcript.
+     `stop` arrives *after* the turn is over and anything sent in reply to it is
+     discarded — see [The STT Session Contract](#the-stt-session-contract)
+   - Send `is_final: true` from your own endpointing as soon as the caller stops
+     speaking; Voice Gateway has no endpointing of its own
+   - Check you are not sending only `is_final: false` (interim) results
+   - Confirm your payload uses the `type: "transcription"` envelope — other
+     shapes are dropped with an error log
+
+4. **TTS Returns Error**
    - Validate all required parameters are provided
    - Check voice name is correct for the language
    - Verify SSML is well-formed if using SSML
 
-4. **Streaming TTS: no audio / garbled / falls back to non-streaming**
+5. **Streaming TTS: no audio / garbled / falls back to non-streaming**
    - Response must be `audio/wav`, linear16, **exactly 8000 Hz, mono** — a
      16000/22050 Hz stream sounds fast/garbled or fails
    - Do **not** set `Content-Length` on the streamed response (it prevents
@@ -1950,7 +2110,7 @@ ffmpeg -i input.wav -acodec pcm_s16le -ar 16000 -ac 1 output.raw
      — otherwise VG uses the non-streaming path
    - See the [Streaming TTS](#streaming-tts) contract for the full checklist
 
-5. **Memory Leaks**
+6. **Memory Leaks**
    - Ensure all event listeners are removed
    - Close streams and connections properly
    - Clear buffers when done
