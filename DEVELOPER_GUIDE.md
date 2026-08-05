@@ -146,7 +146,7 @@ end of the session rather than a request to produce a result.
 
 **Voice Gateway closes the socket too.** Immediately after sending
 `{"type": "stop"}`, Voice Gateway sends its own WebSocket Close frame
-(status `1000`) and then waits only a few seconds (3 s by default) for the
+(close code `1000`, normal closure) and then waits only a few seconds (3 s by default) for the
 close handshake to complete. The `socket.close()` shown in the examples below
 is still correct, but treat it as best-effort cleanup — you do not own the
 close, and you have no meaningful window to do work after `stop`.
@@ -344,7 +344,7 @@ else if (obj.type === 'stop') {
 > result with `is_final: true` at that point, not at `stop`.
 
 > **You do not own the close.** Voice Gateway sends its own Close frame
-> (status `1000`) immediately after `stop` and waits only a few seconds. The
+> (close code `1000`) immediately after `stop` and waits only a few seconds. The
 > `socket.close()` above is best-effort; the connection may already be closing.
 
 Because a call can end abnormally, `stop` is not guaranteed. Keep the same
@@ -1396,7 +1396,7 @@ Fields:
 Semantics: **session teardown, not end-of-turn.** Sent once, when transcription
 for the session ends — after Voice Gateway has already taken the transcript it
 needed. It is not a request to finalize or flush, and results sent in response
-to it are discarded. Voice Gateway sends its own Close frame (status `1000`)
+to it are discarded. Voice Gateway sends its own Close frame (close code `1000`)
 straight after and waits ~3 seconds for the handshake. See
 [The STT Session Contract](#the-stt-session-contract).
 
@@ -1882,9 +1882,11 @@ npm install -g wscat
 wscat -c "ws://localhost:3000/transcribe/yourprovider" \
   -H "Authorization: Bearer your-api-key"
 
-# Then send messages:
-{"type":"start","language":"en-US","sampleRateHz":16000,"interimResults":true}
-# Send binary audio data...
+# Then send messages — this mirrors what Voice Gateway actually sends:
+{"type":"start","language":"en-US","format":"raw","encoding":"LINEAR16","interimResults":true,"sampleRateHz":16000,"options":{}}
+# Send binary audio data at the sampleRateHz above (LINEAR16 PCM, mono)...
+# Your service should emit {"type":"transcription", ...} here, on its own
+# endpointing — before any stop is sent.
 {"type":"stop"}
 ```
 
