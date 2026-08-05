@@ -105,17 +105,44 @@ This guide explains how to develop custom Speech-to-Text (STT) and Text-to-Speec
 >
 > 1. You detect end of speech and send `{"type": "transcription", "is_final": true, …}`
 > 2. Voice Gateway consumes that result and ends the turn
-> 3. Voice Gateway sends `{"type": "stop"}` and closes the socket
+> 3. When the session ends, Voice Gateway sends `{"type": "stop"}` and closes
+>    the socket
 >
-> See [Session Lifecycle](#session-lifecycle) for connection lifetime and
-> shutdown details.
+> Whether step 3 follows every turn or only the last one depends on Voice
+> Gateway's configuration — a connection may cover a single turn or several, so
+> steps 1–2 can repeat before step 3. See
+> [Session Lifecycle](#session-lifecycle) for connection lifetime and shutdown
+> details.
 
 ### Session Lifecycle
 
-**One connection per transcription session, not per utterance.** Voice Gateway
-opens a single WebSocket when transcription starts and keeps it open for the
-whole session, which normally spans **many turns** of the conversation. Do not
-expect a new connection, a new `start`, or a `stop` at each turn boundary.
+**Do not assume a fixed relationship between connections and turns.** A
+connection covers one *transcription session*, and how long a session lives is
+decided by Voice Gateway's configuration — not by your service. Both of these
+are normal, and a single deployment can produce both:
+
+- **One session per turn.** Voice Gateway opens a WebSocket for a single
+  gather/transcribe, and closes it once that turn's transcript has been taken.
+  The next turn gets a fresh connection and a fresh `start`.
+- **One session across several turns.** Voice Gateway keeps a single WebSocket
+  open and continues streaming through multiple turns of the conversation.
+  Configurations that transcribe continuously — barge-in being the common
+  example — behave this way.
+
+Write your module so that **either** is fine:
+
+- Handle more than one turn on a connection: emit an `is_final: true` result per
+  utterance and keep transcribing. Do not treat your first final result as the
+  end of the session or tear down after it.
+- Handle short-lived connections efficiently: session setup can happen once per
+  turn, so keep upstream connection/auth cost low (pool or reuse provider
+  clients where your provider allows it).
+
+The per-connection protocol is identical in both cases: one `start`, continuous
+audio, `transcription` messages whenever you have them, then `stop` and close.
+And in both cases `stop` still arrives **after** Voice Gateway has taken the
+transcript — even when a connection covers exactly one turn, `stop` marks the
+end of the session rather than a request to produce a result.
 
 **Voice Gateway closes the socket too.** Immediately after sending
 `{"type": "stop"}`, Voice Gateway sends its own WebSocket Close frame
@@ -1373,7 +1400,8 @@ Not guaranteed: an abnormal call end can close the socket without a `stop`.
 - Encoding: LINEAR16 PCM (raw PCM audio, 16-bit signed integer, little-endian)
 - Sample rate: As specified in the `start` message
 - Channels: Mono (1 channel)
-- Cadence: streamed continuously for the whole session, across all turns
+- Cadence: streamed continuously for the lifetime of the connection, which may
+  cover a single turn or several — see [Session Lifecycle](#session-lifecycle)
 
 #### 2. From Your Service to Voice Gateway
 
