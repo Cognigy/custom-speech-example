@@ -9,6 +9,7 @@ This guide explains how to develop custom Speech-to-Text (STT) and Text-to-Speec
    - [The STT Session Contract](#the-stt-session-contract)
    - [Session Lifecycle](#session-lifecycle)
 3. [Creating a TTS Module](#creating-a-tts-module)
+   - [Additional request fields and query parameters](#additional-request-fields-and-query-parameters)
    - [Streaming TTS](#streaming-tts)
 4. [External Provider Requirements](#external-provider-requirements)
 5. [Message Format Specifications](#message-format-specifications)
@@ -908,9 +909,11 @@ Accept: audio/wav
 | `encoding` | string | Requested encoding — always `"linear16"` in v1. Informational: honor it or ignore it if your endpoint always produces linear16. |
 | `sample_rate` | number | Requested sample rate — always `8000` in v1. |
 
-- `encoding` and `sample_rate` are **new** compared to the non-streaming body;
-  they tell your endpoint exactly what format VG expects so you can avoid
-  resampling guesswork.
+- `encoding` and `sample_rate` are **new** compared to the baseline
+  non-streaming body; they tell your endpoint exactly what format VG expects so
+  you can avoid resampling guesswork. In both modes the body may also carry
+  additional fields, see
+  [Additional request fields and query parameters](#additional-request-fields-and-query-parameters).
 - `voice`, `language`, `type` are the **same** fields sent in non-streaming
   mode — so a single handler can serve both contracts.
 - If no auth token is configured on the credential, the `Authorization` header
