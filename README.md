@@ -36,6 +36,11 @@ difference is how you deliver the response: buffer it (non-streaming) or stream
 it (streaming). If your endpoint already returns `audio/wav` at linear16/8 kHz,
 enabling streaming is just a matter of streaming the body instead of buffering.
 
+In both modes the JSON body (and the URL's query string) may carry additional
+fields beyond the baseline ones. Your endpoint should ignore fields it doesn't
+know. See [DEVELOPER_GUIDE.md → Additional request fields and query
+parameters](DEVELOPER_GUIDE.md#additional-request-fields-and-query-parameters).
+
 > **The full streaming contract** — request/response shape, WAV format
 > requirements, error semantics, and the enablement flow — is documented in
 > [DEVELOPER_GUIDE.md → Streaming TTS](DEVELOPER_GUIDE.md#streaming-tts).

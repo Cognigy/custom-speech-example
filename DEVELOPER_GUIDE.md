@@ -9,6 +9,7 @@ This guide explains how to develop custom Speech-to-Text (STT) and Text-to-Speec
    - [The STT Session Contract](#the-stt-session-contract)
    - [Session Lifecycle](#session-lifecycle)
 3. [Creating a TTS Module](#creating-a-tts-module)
+   - [Additional request fields and query parameters](#additional-request-fields-and-query-parameters)
    - [Streaming TTS](#streaming-tts)
 4. [External Provider Requirements](#external-provider-requirements)
 5. [Message Format Specifications](#message-format-specifications)
@@ -711,6 +712,46 @@ router.post('/', async(req, res) => {
 module.exports = router;
 ```
 
+#### Additional request fields and query parameters
+
+The body shown above (`text`, `voice`, `language`, `type`, plus `encoding` and
+`sample_rate` in streaming mode) is the baseline, not a closed list. In
+**both** streaming and non-streaming mode, Voice Gateway can forward extra
+fields to your endpoint:
+
+- **Extra body fields** are merged into the JSON request body next to the
+  baseline fields. Nested objects are passed through as nested JSON.
+- **Extra query parameters** are appended to the configured TTS URL, after any
+  query string you already put in it. Don't assume the URL is called verbatim.
+
+```http
+POST /synthesize/<provider-name>?debug=true HTTP/1.1
+Content-Type: application/json
+
+{"text": "Hello", "voice": "ava", "language": "en-US", "type": "text", "pitch": 1.1}
+```
+
+Things to keep in mind when writing an endpoint:
+
+- **Extra fields are optional and gated.** Fields are validated against a
+  per-vendor schema in Voice Gateway; unrecognized ones are dropped unless
+  your Voice Gateway operator has enabled them. Never require an extra field
+  without agreeing on it with whoever runs the deployment.
+- **Be lenient on input.** Ignore fields you don't know instead of returning
+  4xx, so new fields can be added without breaking your endpoint.
+- **Mind the types.** JSON booleans and numbers arrive as real JSON booleans
+  and numbers, not strings. Query parameter values are always plain text.
+- **A single invalid value can drop all extras.** If one extra field has the
+  wrong type, Voice Gateway may discard the whole set of extra fields for that
+  call. If an expected field is missing, check its siblings too.
+- **The spoken text and audio format are not overridable.** `text` always
+  carries the utterance, and in streaming mode `encoding` is always `linear16`
+  (VG strips a fixed 44-byte WAV header and treats the rest as linear16 PCM,
+  see [Streaming TTS](#streaming-tts)). Extra fields can't change either.
+- **`type` detection differs slightly between modes.** Streaming mode treats
+  text starting with `<speak` as SSML, non-streaming mode requires `<speak>`.
+  Prefer wrapping SSML in a plain `<speak>` element.
+
 ### Complete TTS Module Examples
 
 #### Example 1: REST API Provider
@@ -868,9 +909,11 @@ Accept: audio/wav
 | `encoding` | string | Requested encoding — always `"linear16"` in v1. Informational: honor it or ignore it if your endpoint always produces linear16. |
 | `sample_rate` | number | Requested sample rate — always `8000` in v1. |
 
-- `encoding` and `sample_rate` are **new** compared to the non-streaming body;
-  they tell your endpoint exactly what format VG expects so you can avoid
-  resampling guesswork.
+- `encoding` and `sample_rate` are **new** compared to the baseline
+  non-streaming body; they tell your endpoint exactly what format VG expects so
+  you can avoid resampling guesswork. In both modes the body may also carry
+  additional fields, see
+  [Additional request fields and query parameters](#additional-request-fields-and-query-parameters).
 - `voice`, `language`, `type` are the **same** fields sent in non-streaming
   mode — so a single handler can serve both contracts.
 - If no auth token is configured on the credential, the `Authorization` header
